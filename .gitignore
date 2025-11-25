@@ -1,0 +1,30 @@
+# Build output
+bin/
+obj/
+out/
+publish/
+
+# Visual Studio / Rider / IDE-specific
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.idea/
+*.csproj.user
+
+# Test results
+TestResults/
+
+# Logs
+*.log
+
+# OS-specific clutter
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.bak
