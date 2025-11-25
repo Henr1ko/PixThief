@@ -1,138 +1,206 @@
-# PixThief
+# PixThief – Advanced Image Web Scraper
 
-PixThief is a .NET 8 console application that crawls a single page or an entire domain and downloads all images it can find. It supports stealthy crawling, smart delays, and optional image format conversion.
+**Version**: 2.0 – Complete TUI Rebuild  
+**Build**: November 25, 2025  
+**Status**: Production ready
 
-## Features
+PixThief is a .NET 8-powered image web scraper with a full-screen terminal UI, advanced crawling logic,
+and lots of filtering options. Point it at a page (or a whole domain), tweak a few settings, and watch
+the downloads roll in from a live dashboard.
 
-- Single-page mode or whole-domain crawling (BFS).
-- Multiple image discovery strategies:
-  - `<img>` and `<picture>` tags
-  - CSS background images
-  - `data-*` attributes
-  - Media posters and inline styles
-- Optional inclusion of animated GIFs.
-- Stealth mode with realistic HTTP headers and human-like random delays.
-- Automatic retry and backoff when rate-limited (HTTP 429).
-- Optional image format conversion (JPG/PNG/GIF) using ImageSharp.
-- Configurable JPEG quality for converted images.
-- Deduplicated downloads (each image URL is fetched at most once).
+---
+
+## Features at a glance
+
+- 🎛 **Full TUI dashboard** built with Spectre.Console  
+  Live progress, download queue, stats, activity log – everything in the terminal.
+- 🌐 **Single page or full domain crawl**  
+  Limit by max pages and depth, optionally respect `robots.txt`.
+- 🧠 **JavaScript rendering (Playwright)**  
+  Optionally render pages with a real browser to catch dynamically loaded images.
+- 🎯 **Aggressive filtering**  
+  Filter by width/height, file size, filename regex, URL regex, GIF handling, and thumbnail skipping.
+- 📁 **Flexible output layout**  
+  Flat folder, per-page folders, date-based folders, or a mirrored site directory structure.
+- 🔁 **Checkpoints & resume**  
+  Save progress and resume long-running crawls later.
+- 🧾 **Logging & configs**  
+  Log to file, load settings from JSON, and reuse your favorite scraping profiles.
+
+---
 
 ## Requirements
 
-- .NET 8 SDK
-- Windows x64 (project is configured with `win-x64` as runtime identifier)
+- .NET 8 SDK (for building/running from source)
+- Windows x64 is the default target (`win-x64` runtime identifier)
+- For JS rendering: Playwright browser binaries will be downloaded the first time JS mode is used
 
-## Downloads
+You can still tweak the project for other platforms if you want, but the default build is for Windows.
 
-The easiest way to use PixThief is to grab a prebuilt binary:
+---
 
-- **Windows x64**: download the latest `PixThief_win-x64_*.zip` from  
-  [📦 GitHub Releases — Latest](https://github.com/Henr1ko/PixThief/releases/latest)
+## Quick start
 
-Usage from the downloaded build:
+### 1. Using a prebuilt binary (PixThief.exe)
 
-1. Download the ZIP from the latest release.
-2. Extract it to a folder (for example: `C:\\Tools\\PixThief\\`).
-3. Open a terminal/PowerShell in that folder.
-4. Run:
-
-   ```bash
-   PixThief.exe <url> [options]
-   ```
-
-If you prefer to build from source instead, see the next section.
-
-## Building
-
-Clone the repository and build from the solution:
+Just run it with no arguments to launch the TUI:
 
 ```bash
-dotnet build getpics.sln -c Release
+PixThief.exe
 ```
 
-Or build the project directly:
+The TUI will guide you through:
+
+- URL to scrape
+- Single-page vs whole-domain mode
+- Output folder and organization
+- Image filters and download behavior
+- Optional JS rendering and stealth options
+
+Then it shows a live dashboard with progress, stats, and logs.
+
+---
+
+### 2. CLI mode (no TUI)
+
+You can run PixThief fully from the command line if you prefer scripting.
+
+**Basic usage:**
 
 ```bash
-dotnet build getpics/getpics.csproj -c Release
-```
-
-### Publishing a single-file, self-contained binary (Release)
-
-```bash
-dotnet publish getpics/getpics.csproj -c Release -r win-x64 /p:PublishSingleFile=true /p:PublishTrimmed=true /p:SelfContained=true
-```
-
-The published binary will be in:
-
-```text
-getpics/bin/Release/net8.0/win-x64/publish/
-```
-
-## Usage
-
-Basic syntax:
-
-```text
 PixThief.exe <url> [options]
 ```
 
-Example (single page):
+#### Core options
+
+- `--domain`  
+  Crawl the whole domain instead of just the starting page.
+- `--config <file>`  
+  Load settings from a JSON configuration file.
+
+#### Output options
+
+- `--out <folder>`  
+  Set a custom output folder (default: auto-generated).
+- `--organize <type>`  
+  Decide how files are structured:
+  - `flat`
+  - `by-page`
+  - `by-date`
+  - `mirrored` (mirror site path structure)
+
+#### Crawling options
+
+- `--max-pages <n>` – limit how many pages are crawled (default: 100)  
+- `--max-depth <n>` – link depth limit (0 for only the starting page, negative for unlimited)  
+- `--robots-txt <true|false>` – whether to respect `robots.txt`
+
+#### Download options
+
+- `--concurrency <n>` – how many images to download in parallel (1–32, default: 4)  
+- `--stealth` – randomize delays between requests for a more “human” pattern  
+- `--delay <ms>` – fixed delay between requests (disables randomization)
+
+#### Image filtering
+
+- `--min-width <px>` / `--min-height <px>`  
+- `--max-width <px>` / `--max-height <px>`  
+- `--min-size <kb>` / `--max-size <kb>`  
+- `--filename-pattern <regex>` – filter by filename using a regex  
+- `--url-regex <regex>` – filter by image URL using a regex  
+- `--include-gifs` – keep animated GIFs instead of skipping them  
+- `--skip-thumbnails` – ignore small thumbnail-style images
+
+#### Image conversion
+
+- `--convert-to <fmt>` – convert downloaded images to `jpg`, `png`, or `gif`  
+- `--jpeg-quality <n>` – quality for JPEG output (1–100, default around 90)
+
+#### Advanced features
+
+- `--enable-js` – enable JavaScript rendering via Playwright  
+- `--js-wait <ms>` – how long to wait for JS (typical range: 500–30000 ms)  
+- `--checkpoint <file>` – save checkpoints so you can resume later  
+- `--log <file>` – log detailed activity to a specific file  
+- `--verbose` – show extra info while running  
+- `--help` – show the built-in help and examples
+
+---
+
+## Example commands
+
+Scrape a single page with default behavior:
 
 ```bash
 PixThief.exe https://example.com
 ```
 
-Example (crawl entire domain with stealth mode and 2-second base delay):
+Crawl an entire domain with JS rendering and stealth mode:
 
 ```bash
-PixThief.exe https://example.com --domain --stealth --delay 2000
+PixThief.exe https://example.com --domain --enable-js --stealth
 ```
 
-Example (convert everything to JPEG with quality 85):
+Download only reasonably large images and avoid huge files:
 
 ```bash
-PixThief.exe https://example.com/gallery --convert-to jpg --jpeg-quality 85
+PixThief.exe https://example.com --min-width 640 --min-height 480 --max-size 5000
 ```
 
-## Options
+Organize by date with more parallel downloads:
 
-- `--domain`  
-  Crawl the entire domain instead of just the single page.
+```bash
+PixThief.exe https://example.com --domain --concurrency 8 --organize by-date
+```
 
-- `--out <folder>`  
-  Set a custom output folder name. Invalid characters are sanitized.
+Use a configuration file:
 
-- `--max-pages <n>`  
-  Maximum number of pages to crawl in domain mode (default: 100). Must be > 0.
+```bash
+PixThief.exe https://example.com --config settings.json
+```
 
-- `--include-gifs`  
-  Include animated GIFs in the download set.
+---
 
-- `--stealth`  
-  Enable stealth mode with realistic browser headers and randomized delays.
+## Configuration files
 
-- `--delay <ms>`  
-  Set a base delay in milliseconds between requests (must be > 0).  
-  When used without `--stealth`, this is a fixed delay.  
-  In stealth mode, this is the base for randomized delays.
+PixThief can load settings from a JSON config file using `--config <file>`.
 
-- `--convert-to <fmt>`  
-  Convert downloaded images to a specific format. Supported values: `jpg`, `jpeg`, `png`, `gif`.
+A config file typically stores things like:
 
-- `--jpeg-quality <1-100>`  
-  JPEG encoder quality to use when `--convert-to jpg` is set (default: 90).
+- Default output folder
+- Crawl limits (pages, depth)
+- Concurrency and delays
+- Stealth mode and JS rendering preferences
+- Filter thresholds (size, dimensions)
+- Logging and checkpoint preferences
 
-- `--verbose`  
-  Show detailed error and debug output.
+You can create a config by starting from a crawl you like and saving out the important values,
+then reusing that file with `--config` in future runs.
 
-- `--help`, `-h`, `/?`  
-  Show usage information and exit.
+---
 
-## Notes
+## Building from source
 
-PixThief does not enforce any particular crawling policy. How you use this tool is your responsibility.  
-Make sure you understand and respect the laws and terms that apply in your jurisdiction and to the sites you interact with.
+Clone and build with the .NET 8 SDK:
+
+```bash
+git clone https://github.com/Henr1ko/PixThief.git
+cd PixThief/getpics
+dotnet restore
+dotnet run
+```
+
+For a self-contained Windows x64 build (includes the runtime):
+
+```bash
+dotnet publish -c Release -r win-x64
+```
+
+For a lighter build that depends on an installed .NET 8 runtime,
+you can use the `Lightweight` configuration defined in the project.
+
+---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+PixThief is released under the MIT License. See `LICENSE` for full details.

@@ -10,14 +10,36 @@ class Program
     {
         try
         {
+            // If no arguments provided, launch the full TUI application
+            if (args.Length == 0)
+            {
+                var tui = new TuiApplication();
+                await tui.RunAsync();
+                return 0;
+            }
+
+            // Otherwise, use CLI mode with interactive setup
             var options = ParseArguments(args);
             if (options == null || string.IsNullOrEmpty(options.Url))
             {
-                // ParseArguments already printed an error or help message.
                 return 1;
             }
 
-            var scraper = new ImageScraper(options);
+            // Load configuration file if specified
+            if (!string.IsNullOrEmpty(options.ConfigFile) && File.Exists(options.ConfigFile))
+            {
+                ApplyConfigFile(options, options.ConfigFile);
+            }
+
+            // Show interactive setup menu if URL was provided
+            var setup = new InteractiveSetup(options);
+            setup.ShowSetupMenu();
+
+            // Create stats tracker
+            var stats = new ProgressStats();
+
+            // Create and run the enhanced scraper
+            var scraper = new ImageScraperEnhanced(options, stats);
 
             if (options.IsDomainMode)
             {
@@ -45,14 +67,12 @@ class Program
             return null;
         }
 
-        // Allow calling with just --help / -h / /? without a URL
         if (IsHelpOption(args[0]))
         {
             PrintUsage();
             return null;
         }
 
-        // First argument is always the URL
         var url = args[0];
 
         // Validate URL format
@@ -72,12 +92,76 @@ class Program
 
             switch (arg.ToLowerInvariant())
             {
+                // Core functionality
                 case "--domain":
                     options.IsDomainMode = true;
                     break;
 
-                case "--include-gifs":
-                    options.IncludeAnimatedGifs = true;
+                case "--config":
+                    if (!TryReadValueOption(args, ref i, "--config", out var configFile))
+                        return null;
+                    options.ConfigFile = configFile;
+                    break;
+
+                // Output options
+                case "--out":
+                    if (!TryReadValueOption(args, ref i, "--out", out var folder))
+                        return null;
+                    options.OutputFolder = SanitizeFileName(folder);
+                    break;
+
+                case "--organize":
+                    if (!TryReadValueOption(args, ref i, "--organize", out var orgType))
+                        return null;
+                    if (orgType != "flat" && orgType != "by-page" && orgType != "by-date" && orgType != "mirrored")
+                    {
+                        Console.Error.WriteLine("[ERROR] --organize must be: flat, by-page, by-date, or mirrored");
+                        return null;
+                    }
+                    options.OutputOrganization = orgType;
+                    break;
+
+                // Crawling options
+                case "--max-pages":
+                    if (!TryReadIntOption(args, ref i, "--max-pages", out var maxPages))
+                        return null;
+                    if (maxPages <= 0)
+                    {
+                        Console.Error.WriteLine("[ERROR] --max-pages must be a positive integer.");
+                        return null;
+                    }
+                    options.MaxPages = maxPages;
+                    break;
+
+                case "--max-depth":
+                    if (!TryReadIntOption(args, ref i, "--max-depth", out var maxDepth))
+                        return null;
+                    options.MaxDepth = maxDepth;
+                    break;
+
+                case "--robots-txt":
+                    var robotsVal = args[i + 1]?.ToLower();
+                    if (robotsVal == "false" || robotsVal == "0" || robotsVal == "no")
+                    {
+                        options.RespectRobotsTxt = false;
+                        i++;
+                    }
+                    else
+                    {
+                        options.RespectRobotsTxt = true;
+                    }
+                    break;
+
+                // Download options
+                case "--concurrency":
+                    if (!TryReadIntOption(args, ref i, "--concurrency", out var concurrency))
+                        return null;
+                    if (concurrency < 1 || concurrency > 32)
+                    {
+                        Console.Error.WriteLine("[ERROR] --concurrency must be between 1 and 32.");
+                        return null;
+                    }
+                    options.MaxConcurrentDownloads = concurrency;
                     break;
 
                 case "--stealth":
@@ -86,79 +170,140 @@ class Program
                     break;
 
                 case "--delay":
+                    if (!TryReadIntOption(args, ref i, "--delay", out var delay))
+                        return null;
+                    if (delay <= 0)
                     {
-                        if (!TryReadIntOption(args, ref i, "--delay", out var delay))
-                            return null;
-
-                        if (delay <= 0)
-                        {
-                            Console.Error.WriteLine("[ERROR] --delay must be a positive number of milliseconds.");
-                            return null;
-                        }
-
-                        options.RequestDelayMs = delay;
-                        options.StealthMode = true;
-                        options.RandomizeDelays = false;
-                        break;
+                        Console.Error.WriteLine("[ERROR] --delay must be a positive number of milliseconds.");
+                        return null;
                     }
+                    options.RequestDelayMs = delay;
+                    options.StealthMode = true;
+                    options.RandomizeDelays = false;
+                    break;
 
-                case "--max-pages":
+                // Image filtering options
+                case "--min-width":
+                    if (!TryReadIntOption(args, ref i, "--min-width", out var minWidth))
+                        return null;
+                    options.MinImageWidth = minWidth;
+                    break;
+
+                case "--min-height":
+                    if (!TryReadIntOption(args, ref i, "--min-height", out var minHeight))
+                        return null;
+                    options.MinImageHeight = minHeight;
+                    break;
+
+                case "--max-width":
+                    if (!TryReadIntOption(args, ref i, "--max-width", out var maxWidth))
+                        return null;
+                    options.MaxImageWidth = maxWidth;
+                    break;
+
+                case "--max-height":
+                    if (!TryReadIntOption(args, ref i, "--max-height", out var maxHeight))
+                        return null;
+                    options.MaxImageHeight = maxHeight;
+                    break;
+
+                case "--min-size":
+                    if (!TryReadIntOption(args, ref i, "--min-size", out var minSizeKb))
+                        return null;
+                    options.MinFileSizeKb = minSizeKb;
+                    break;
+
+                case "--max-size":
+                    if (!TryReadIntOption(args, ref i, "--max-size", out var maxSizeKb))
+                        return null;
+                    options.MaxFileSizeKb = maxSizeKb;
+                    break;
+
+                case "--filename-pattern":
+                    if (!TryReadValueOption(args, ref i, "--filename-pattern", out var filenamePattern))
+                        return null;
+                    options.FilenamePattern = filenamePattern;
+                    break;
+
+                case "--url-regex":
+                    if (!TryReadValueOption(args, ref i, "--url-regex", out var urlRegex))
+                        return null;
+                    try
                     {
-                        if (!TryReadIntOption(args, ref i, "--max-pages", out var maxPages))
-                            return null;
-
-                        if (maxPages <= 0)
-                        {
-                            Console.Error.WriteLine("[ERROR] --max-pages must be a positive integer.");
-                            return null;
-                        }
-
-                        options.MaxPages = maxPages;
-                        break;
+                        new Regex(urlRegex);
+                        options.UrlRegexFilter = urlRegex;
                     }
-
-                case "--out":
+                    catch
                     {
-                        if (!TryReadValueOption(args, ref i, "--out", out var folder))
-                            return null;
-
-                        options.OutputFolder = SanitizeFileName(folder);
-                        break;
+                        Console.Error.WriteLine("[ERROR] Invalid regex pattern for --url-regex.");
+                        return null;
                     }
+                    break;
 
+                // Image conversion
                 case "--convert-to":
+                    if (!TryReadValueOption(args, ref i, "--convert-to", out var formatRaw))
+                        return null;
+                    var format = formatRaw.ToLowerInvariant();
+                    if (format == "jpeg")
+                        format = "jpg";
+                    if (format != "jpg" && format != "png" && format != "gif")
                     {
-                        if (!TryReadValueOption(args, ref i, "--convert-to", out var formatRaw))
-                            return null;
-
-                        var format = formatRaw.ToLowerInvariant();
-                        if (format == "jpeg")
-                            format = "jpg";
-
-                        if (format != "jpg" && format != "png" && format != "gif")
-                        {
-                            Console.Error.WriteLine("[ERROR] Invalid value for --convert-to. Use: jpg, png, or gif.");
-                            return null;
-                        }
-
-                        options.ConvertToFormat = format;
-                        break;
+                        Console.Error.WriteLine("[ERROR] Invalid value for --convert-to. Use: jpg, png, or gif.");
+                        return null;
                     }
+                    options.ConvertToFormat = format;
+                    break;
 
                 case "--jpeg-quality":
+                    if (!TryReadIntOption(args, ref i, "--jpeg-quality", out var quality))
+                        return null;
+                    if (quality < 1 || quality > 100)
                     {
-                        if (!TryReadIntOption(args, ref i, "--jpeg-quality", out var quality))
-                            return null;
-
-                        if (quality < 1 || quality > 100)
-                        {
-                            Console.Error.WriteLine("[ERROR] --jpeg-quality must be between 1 and 100.");
-                            return null;
-                        }
-
-                        options.JpegQuality = quality;
-                        break;
+                        Console.Error.WriteLine("[ERROR] --jpeg-quality must be between 1 and 100.");
+                        return null;
                     }
+                    options.JpegQuality = quality;
+                    break;
+
+                case "--include-gifs":
+                    options.IncludeAnimatedGifs = true;
+                    break;
+
+                case "--skip-thumbnails":
+                    options.SkipThumbnails = true;
+                    break;
+
+                // JavaScript rendering (the killer feature)
+                case "--enable-js":
+                    options.EnableJavaScriptRendering = true;
+                    break;
+
+                case "--js-wait":
+                    if (!TryReadIntOption(args, ref i, "--js-wait", out var jsWait))
+                        return null;
+                    if (jsWait < 500 || jsWait > 30000)
+                    {
+                        Console.Error.WriteLine("[ERROR] --js-wait must be between 500 and 30000 milliseconds.");
+                        return null;
+                    }
+                    options.JavaScriptWaitTimeMs = jsWait;
+                    break;
+
+                // Checkpoint and logging
+                case "--checkpoint":
+                    if (!TryReadValueOption(args, ref i, "--checkpoint", out var checkpointFile))
+                        return null;
+                    options.CheckpointFile = checkpointFile;
+                    options.EnableCheckpoints = true;
+                    break;
+
+                case "--log":
+                    if (!TryReadValueOption(args, ref i, "--log", out var logFile))
+                        return null;
+                    options.LogFilePath = logFile;
+                    options.EnableFileLogging = true;
+                    break;
 
                 case "--verbose":
                     options.IsVerbose = true;
@@ -179,11 +324,49 @@ class Program
         return options;
     }
 
-    static bool IsHelpOption(string arg)
+    static void ApplyConfigFile(ScraperOptions options, string configFile)
     {
-        var value = arg.ToLowerInvariant();
-        return value == "--help" || value == "-h" || value == "/?";
+        try
+        {
+            var config = ConfigFile.Load(configFile);
+            if (!string.IsNullOrEmpty(config.OutputFolder))
+                options.OutputFolder = config.OutputFolder;
+            options.MaxPages = config.MaxPages;
+            options.RequestDelayMs = config.RequestDelayMs;
+            options.MaxConcurrentDownloads = config.MaxConcurrentDownloads;
+            options.MaxDepth = config.MaxDepth;
+            options.StealthMode = config.StealthMode;
+            options.RespectRobotsTxt = config.RespectRobotsTxt;
+            options.IncludeAnimatedGifs = config.IncludeAnimatedGifs;
+            if (!string.IsNullOrEmpty(config.ConvertToFormat))
+                options.ConvertToFormat = config.ConvertToFormat;
+            options.JpegQuality = config.JpegQuality;
+            options.OutputOrganization = config.OutputOrganization;
+            options.MinImageWidth = config.MinImageWidth;
+            options.MinImageHeight = config.MinImageHeight;
+            options.MaxImageWidth = config.MaxImageWidth;
+            options.MaxImageHeight = config.MaxImageHeight;
+            options.MinFileSizeKb = config.MinFileSizeKb;
+            options.MaxFileSizeKb = config.MaxFileSizeKb;
+            if (!string.IsNullOrEmpty(config.FilenamePattern))
+                options.FilenamePattern = config.FilenamePattern;
+            if (!string.IsNullOrEmpty(config.UrlRegexFilter))
+                options.UrlRegexFilter = config.UrlRegexFilter;
+            options.SkipThumbnails = config.SkipThumbnails;
+            options.EnableJavaScriptRendering = config.EnableJavaScriptRendering;
+            options.JavaScriptWaitTimeMs = config.JavaScriptWaitTimeMs;
+            options.EnableFileLogging = config.EnableFileLogging;
+            if (!string.IsNullOrEmpty(config.LogFilePath))
+                options.LogFilePath = config.LogFilePath;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[WARN] Failed to load config: {ex.Message}");
+        }
     }
+
+    static bool IsHelpOption(string arg) =>
+        arg.ToLowerInvariant() is "--help" or "-h" or "/?";
 
     static bool TryReadValueOption(string[] args, ref int index, string optionName, out string value)
     {
@@ -216,36 +399,70 @@ class Program
 
     static void PrintUsage()
     {
-        Console.WriteLine("PixThief - Steal images from web pages");
+        Console.WriteLine("PixThief - Advanced Image Web Scraper");
+        Console.WriteLine("==========================================");
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  PixThief.exe <url> [options]");
         Console.WriteLine();
-        Console.WriteLine("Arguments:");
-        Console.WriteLine("  <url>              URL of the web page to scrape (HTTP/HTTPS required)");
+        Console.WriteLine("Core Options:");
+        Console.WriteLine("  --domain                   Crawl entire domain (not just single page)");
+        Console.WriteLine("  --config <file>            Load settings from JSON config file");
         Console.WriteLine();
-        Console.WriteLine("Options:");
-        Console.WriteLine("  --domain           Crawl the entire domain, not just the given page");
-        Console.WriteLine("  --max-pages <n>    Max pages to crawl in domain mode (default: 100)");
-        Console.WriteLine("  --out <name>       Override the output folder name");
-        Console.WriteLine("  --include-gifs     Include animated GIF files in downloads");
-        Console.WriteLine("  --stealth          Enable stealth mode with smart randomized delays");
-        Console.WriteLine("  --delay <ms>       Use a fixed delay between requests (disables randomization)");
-        Console.WriteLine("  --convert-to <fmt> Convert all images to: jpg, png, or gif");
-        Console.WriteLine("  --jpeg-quality <n> JPEG quality for conversion (1-100, default: 90)");
-        Console.WriteLine("  --verbose          Print detailed information about operations");
-        Console.WriteLine("  --help, -h         Show this help message and exit");
+        Console.WriteLine("Output Options:");
+        Console.WriteLine("  --out <folder>             Custom output folder name");
+        Console.WriteLine("  --organize <type>          Output organization: flat, by-page, by-date, mirrored");
         Console.WriteLine();
-        Console.WriteLine("Stealth mode:");
-        Console.WriteLine("  - Uses realistic HTTP headers and randomized delays");
-        Console.WriteLine("  - Applies progressive backoff when rate limiting is detected");
-        Console.WriteLine("  - Aims to mimic human browsing patterns");
+        Console.WriteLine("Crawling Options:");
+        Console.WriteLine("  --max-pages <n>            Max pages to crawl (default: 100)");
+        Console.WriteLine("  --max-depth <n>            Max crawl depth (default: unlimited)");
+        Console.WriteLine("  --robots-txt <bool>        Respect robots.txt (default: true)");
+        Console.WriteLine();
+        Console.WriteLine("Download Options:");
+        Console.WriteLine("  --concurrency <n>          Parallel downloads (1-32, default: 4)");
+        Console.WriteLine("  --stealth                  Enable stealth mode with randomized delays");
+        Console.WriteLine("  --delay <ms>               Fixed delay between requests (disables randomization)");
+        Console.WriteLine();
+        Console.WriteLine("Image Filtering:");
+        Console.WriteLine("  --min-width <px>           Minimum image width");
+        Console.WriteLine("  --min-height <px>          Minimum image height");
+        Console.WriteLine("  --max-width <px>           Maximum image width");
+        Console.WriteLine("  --max-height <px>          Maximum image height");
+        Console.WriteLine("  --min-size <kb>            Minimum file size in KB");
+        Console.WriteLine("  --max-size <kb>            Maximum file size in KB");
+        Console.WriteLine("  --filename-pattern <regex> Regex pattern for filenames");
+        Console.WriteLine("  --url-regex <regex>        Regex pattern for image URLs");
+        Console.WriteLine("  --include-gifs             Include animated GIFs");
+        Console.WriteLine("  --skip-thumbnails          Skip small thumbnail images (<200x200px)");
+        Console.WriteLine();
+        Console.WriteLine("Image Conversion:");
+        Console.WriteLine("  --convert-to <fmt>         Convert images to: jpg, png, or gif");
+        Console.WriteLine("  --jpeg-quality <n>         JPEG quality 1-100 (default: 90)");
+        Console.WriteLine();
+        Console.WriteLine("Advanced Features:");
+        Console.WriteLine("  --enable-js                Enable JavaScript rendering (Playwright)");
+        Console.WriteLine("  --js-wait <ms>             JS wait time (500-30000ms, default: 3000)");
+        Console.WriteLine("  --checkpoint <file>        Save progress checkpoints");
+        Console.WriteLine("  --log <file>               Log all operations to file");
+        Console.WriteLine("  --verbose                  Print detailed information");
+        Console.WriteLine("  --help                     Show this help message");
         Console.WriteLine();
         Console.WriteLine("Examples:");
-        Console.WriteLine("  PixThief.exe https://example.com/page");
-        Console.WriteLine("  PixThief.exe https://example.com --domain --stealth");
-        Console.WriteLine("  PixThief.exe https://example.com --stealth --max-pages 50");
-        Console.WriteLine("  PixThief.exe https://example.com --delay 2000 --convert-to jpg");
+        Console.WriteLine("  # Simple page scrape");
+        Console.WriteLine("  PixThief.exe https://example.com");
+        Console.WriteLine();
+        Console.WriteLine("  # Domain crawl with JS rendering (killer feature!)");
+        Console.WriteLine("  PixThief.exe https://example.com --domain --enable-js --stealth");
+        Console.WriteLine();
+        Console.WriteLine("  # Filtered download with size limits");
+        Console.WriteLine("  PixThief.exe https://example.com --min-width 640 --max-size 5000");
+        Console.WriteLine();
+        Console.WriteLine("  # Parallel downloads with custom organization");
+        Console.WriteLine("  PixThief.exe https://example.com --domain --concurrency 8 --organize by-date");
+        Console.WriteLine();
+        Console.WriteLine("  # With configuration file");
+        Console.WriteLine("  PixThief.exe https://example.com --config settings.json");
+        Console.WriteLine();
     }
 
     static string SanitizeFileName(string fileName)
