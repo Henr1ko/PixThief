@@ -1,205 +1,115 @@
-# PixThief – Advanced Image Web Scraper
+# 🖼️ PixThief
 
-**Version**: 2.0 – Complete TUI Rebuild  
-**Build**: November 25, 2025  
+**The image scraper that actually works on modern websites.**
 
-PixThief is a .NET 8-powered image web scraper with a full-screen terminal UI, advanced crawling logic,
-and lots of filtering options. Point it at a page (or a whole domain), tweak a few settings, and watch
-the downloads roll in from a live dashboard.
+No config files. No CLI flags to memorize. No Python environment to set up. Just run it, paste a URL, and grab your images.
 
----
-
-## Features at a glance
-
-- 🎛 **Full TUI dashboard** built with Spectre.Console  
-  Live progress, download queue, stats, activity log – everything in the terminal.
-- 🌐 **Single page or full domain crawl**  
-  Limit by max pages and depth, optionally respect `robots.txt`.
-- 🧠 **JavaScript rendering (Playwright)**  
-  Optionally render pages with a real browser to catch dynamically loaded images.
-- 🎯 **Aggressive filtering**  
-  Filter by width/height, file size, filename regex, URL regex, GIF handling, and thumbnail skipping.
-- 📁 **Flexible output layout**  
-  Flat folder, per-page folders, date-based folders, or a mirrored site directory structure.
-- 🔁 **Checkpoints & resume**  
-  Save progress and resume long-running crawls later.
-- 🧾 **Logging & configs**  
-  Log to file, load settings from JSON, and reuse your favorite scraping profiles.
+[![Release](https://img.shields.io/badge/release-v2.0.0-blue)](https://github.com/Henr1ko/PixThief/releases/tag/v2.0.0)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)]()
+[![.NET](https://img.shields.io/badge/.NET-8.0-purple)]()
 
 ---
 
-## Requirements
+## ⚡ Quick Start
 
-- .NET 8 SDK (for building/running from source)
-- Windows x64 is the default target (`win-x64` runtime identifier)
-- For JS rendering: Playwright browser binaries will be downloaded the first time JS mode is used
+1. **[Download the latest release](https://github.com/Henr1ko/PixThief/releases/tag/v2.0.0)**
+2. Run `PixThief.exe`
+3. Enter a URL
+4. Hit Start
 
-You can still tweak the project for other platforms if you want, but the default build is for Windows.
-
----
-
-## Quick start
-
-### 1. Using a prebuilt binary (PixThief.exe)
-
-Just run it with no arguments to launch the TUI:
-
-```bash
-PixThief.exe
-```
-
-The TUI will guide you through:
-
-- URL to scrape
-- Single-page vs whole-domain mode
-- Output folder and organization
-- Image filters and download behavior
-- Optional JS rendering and stealth options
-
-Then it shows a live dashboard with progress, stats, and logs.
+That's it. No really, that's it.
 
 ---
 
-### 2. CLI mode (no TUI)
+## ✨ Features
 
-You can run PixThief fully from the command line if you prefer scripting.
+### 🧠 Actually Works on Modern Sites
+Most scrapers choke on JavaScript-heavy sites. PixThief has **built-in browser rendering** (Playwright) that handles React, Vue, lazy-loading, infinite scroll - all the stuff that breaks other tools. Toggle it on, and suddenly that "impossible" site just works.
 
-**Basic usage:**
+### 🎨 Beautiful TUI
+No more squinting at `--help` output. PixThief has a clean, interactive terminal interface. Navigate with arrow keys, see your settings at a glance, watch downloads in real-time. It's actually pleasant to use.
 
-```bash
-PixThief.exe <url> [options]
-```
+### 🚀 Fast by Default
+Parallel downloads (up to 32 threads), smart deduplication so you don't download the same image twice, and stealth mode to avoid getting blocked. Out of the box. No tuning required.
 
-#### Core options
+### 🔄 Resume Downloads
+Internet died? Laptop crashed? PixThief saves checkpoints automatically. Just run it again and pick up where you left off.
 
-- `--domain`  
-  Crawl the whole domain instead of just the starting page.
-- `--config <file>`  
-  Load settings from a JSON configuration file.
+### 🎛️ Powerful When You Need It
+Simple by default, but the options are there when you want them:
 
-#### Output options
-
-- `--out <folder>`  
-  Set a custom output folder (default: auto-generated).
-- `--organize <type>`  
-  Decide how files are structured:
-  - `flat`
-  - `by-page`
-  - `by-date`
-  - `mirrored` (mirror site path structure)
-
-#### Crawling options
-
-- `--max-pages <n>` – limit how many pages are crawled (default: 100)  
-- `--max-depth <n>` – link depth limit (0 for only the starting page, negative for unlimited)  
-- `--robots-txt <true|false>` – whether to respect `robots.txt`
-
-#### Download options
-
-- `--concurrency <n>` – how many images to download in parallel (1–32, default: 4)  
-- `--stealth` – randomize delays between requests for a more “human” pattern  
-- `--delay <ms>` – fixed delay between requests (disables randomization)
-
-#### Image filtering
-
-- `--min-width <px>` / `--min-height <px>`  
-- `--max-width <px>` / `--max-height <px>`  
-- `--min-size <kb>` / `--max-size <kb>`  
-- `--filename-pattern <regex>` – filter by filename using a regex  
-- `--url-regex <regex>` – filter by image URL using a regex  
-- `--include-gifs` – keep animated GIFs instead of skipping them  
-- `--skip-thumbnails` – ignore small thumbnail-style images
-
-#### Image conversion
-
-- `--convert-to <fmt>` – convert downloaded images to `jpg`, `png`, or `gif`  
-- `--jpeg-quality <n>` – quality for JPEG output (1–100, default around 90)
-
-#### Advanced features
-
-- `--enable-js` – enable JavaScript rendering via Playwright  
-- `--js-wait <ms>` – how long to wait for JS (typical range: 500–30000 ms)  
-- `--checkpoint <file>` – save checkpoints so you can resume later  
-- `--log <file>` – log detailed activity to a specific file  
-- `--verbose` – show extra info while running  
-- `--help` – show the built-in help and examples
+- Filter by image size (skip thumbnails, target specific dimensions)
+- Crawl entire domains or single pages
+- Convert formats on the fly (PNG → JPG, etc.)
+- Organize output (by date, by page, mirrored structure)
+- Respect robots.txt (because we're not animals)
 
 ---
 
-## Example commands
+## 🛠️ System Requirements
 
-Scrape a single page with default behavior:
-
-```bash
-PixThief.exe https://example.com
-```
-
-Crawl an entire domain with JS rendering and stealth mode:
-
-```bash
-PixThief.exe https://example.com --domain --enable-js --stealth
-```
-
-Download only reasonably large images and avoid huge files:
-
-```bash
-PixThief.exe https://example.com --min-width 640 --min-height 480 --max-size 5000
-```
-
-Organize by date with more parallel downloads:
-
-```bash
-PixThief.exe https://example.com --domain --concurrency 8 --organize by-date
-```
-
-Use a configuration file:
-
-```bash
-PixThief.exe https://example.com --config settings.json
-```
+- Windows x64
+- ~200MB disk space
+- That's it (runtime is included)
 
 ---
 
-## Configuration files
+## 🎮 Usage Examples
 
-PixThief can load settings from a JSON config file using `--config <file>`.
+### "I just want the images from this page"
+1. Run PixThief
+2. Set URL → paste your link
+3. Single Page mode
+4. Start Download
+5. Done
 
-A config file typically stores things like:
+### "I want EVERYTHING from this website"
+1. Run PixThief
+2. Set URL → paste the homepage
+3. Entire Domain mode
+4. Maybe bump up concurrency to 8-16
+5. Enable Stealth Mode (be nice to servers)
+6. Start Download
+7. Go make coffee
 
-- Default output folder
-- Crawl limits (pages, depth)
-- Concurrency and delays
-- Stealth mode and JS rendering preferences
-- Filter thresholds (size, dimensions)
-- Logging and checkpoint preferences
-
-You can create a config by starting from a crawl you like and saving out the important values,
-then reusing that file with `--config` in future runs.
-
----
-
-## Building from source
-
-Clone and build with the .NET 8 SDK:
-
-```bash
-git clone https://github.com/Henr1ko/PixThief.git
-cd PixThief/getpics
-dotnet restore
-dotnet run
-```
-
-For a self-contained Windows x64 build (includes the runtime):
-
-```bash
-dotnet publish -c Release -r win-x64
-```
-
-For a lighter build that depends on an installed .NET 8 runtime,
-you can use the `Lightweight` configuration defined in the project.
+### "This site is full of JavaScript garbage"
+1. Run PixThief
+2. Set your URL
+3. Advanced Settings → Enable JS Rendering
+4. Start Download
+5. Watch it work anyway 😎
 
 ---
 
-## License
+## 🔥 Pro Tips
 
-PixThief is released under the MIT License. See `LICENSE` for full details.
+- **Stealth Mode** adds randomized delays between requests. Slower, but way less likely to get blocked.
+- **Skip Thumbnails** filters out images smaller than 200x200px. Saves you from downloading 10,000 tiny icons.
+- **JS Rendering** is the secret weapon. If a site looks broken or empty, turn this on.
+- **Checkpoints** are automatic in domain mode. If something goes wrong, just restart - it remembers.
+
+---
+
+## 📥 Download
+
+**[→ Get PixThief v2.0.0](https://github.com/Henr1ko/PixThief/releases/tag/v2.0.0)**
+
+Just download, extract, and run. No installation needed.
+
+---
+
+## 🤝 Contributing
+
+Found a bug? Got an idea? Open an issue or PR. Keep it chill.
+
+---
+
+## 📜 License
+
+MIT - Do whatever you want with it.
+
+---
+
+<p align="center">
+  <i>Built because every other scraper was annoying to use.</i>
+</p>
